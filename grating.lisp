@@ -134,75 +134,6 @@
 		   :if-exists :append )
   (format s "mem")))
 
-;; if you go from one pixel along vector a, you end up on a pixel with
-;; the opposite state. the same for a step in direction of vector
-;; b. to draw the grating into a picture, just fill a 2d array with
-;; this procedure until all pixel have been visited once
-
-(defun draw-grating (ax ay bx by &key debug)
-  ;; i use the following states for the pixels in the array: 2 means
-  ;; unvisited, 0 off, 1 on
-  (let* ((unvisited 2)
-	 (off 0)
-	 (w (* 2 (+ ax bx)))
-	 (h (* 2 (+ ay by)))
-	 (a (make-array (list h w) :element-type '(unsigned-byte 8)
-		       :initial-element unvisited))
-	(work nil))
-    ;; set the pixel in the edge to off and push it into the work
-    ;; stack, each point from the work stack will introduce two new
-    ;; points in the array (along vec a and vec b)
-    (setf (aref a 0 0) off) 
-    (push (list 0 0) work)
-    ;; pop from the work stack until all points have been visited
-    (loop for point = (pop work) while point do
-	 (destructuring-bind (y x) point
-	   (when debug (format t "doing ~a.~%" point))
-	   (labels ((fill-point (yy xx)
-		     (when (= unvisited (aref a
-					      (mod (+ yy y) h)
-					      (mod (+ xx x) w)))
-		       (let ((cur (aref a y x)))
-			 (setf (aref a
-				     (mod (+ yy y) h)
-				     (mod (+ xx x) w))
-			       (ecase cur
-				 (2 (error "trying to work from unvisited point, this must not happen"))
-				 (0 1)
-				 (1 0)))
-			 (when debug (format t "push ~a."
-					     (list (mod (+ yy y) h)
-						   (mod (+ xx x) w))))
-			 (push (list (mod (+ yy y) h)
-				     (mod (+ xx x) w))
-			       work)))))
-	     (fill-point ay ax)
-	     (fill-point by bx)
-	     )
-	   ))
-    a))
-
-
-
-#+nil
-(defparameter *hist*
-  ;; calculate histogram, to see if gratings do concentrate
-  ;; (apparently they are distributed rather uniformly)
-  (let ((bla (make-array (array-dimension *bla* 1) :element-type 'double-float)))
-    (dotimes (i (length bla))
-      (setf (aref bla i) (aref *bla* 3 i)))
-   (let* ((ma (reduce #'max bla)) 
-	  (mi (reduce #'min bla))
-	  (n 30)
-	  (s (/ (* 1d0 (- n 1)) (- ma mi)))
-	  (hist (make-array n :element-type 'fixnum))
-	  (bin (make-array n :element-type 'double-float)))
-     (loop for e across bla do
-	  (incf (aref hist (floor (* s (- e mi)))))
-	  (setf (aref bin (floor (* s (- e mi)))) e))
-     (loop for i below n collect (list (aref bin i)
-				       (aref hist i))))))
-
 ;; triangle rasterization
 ;; Tutorial - Introduction to Software-based Rendering: Triangle Rasterization - joshbeam.com.html
 (defclass edge ()
@@ -300,54 +231,39 @@
 	(loop for x from (span-x1 s) below (span-x2 s) do
 	     (set-pixel  (floor x) (floor y))
 	     (incf factor factorstep))))))
-
-(defvar *a* nil)
-(defvar *b* nil)
-(defvar *points* nil)
-(defvar *edges* nil)
-(defvar *long-edge* 0)
+(defparameter *a* nil)
+(defparameter *b* nil)
+(defparameter *grating* nil)
+(defparameter *color* 0)
 (defun set-pixel (x y)
   (when *a*
     (destructuring-bind (h w) (array-dimensions *a*)
       (setf (aref *a*
 		  (max 0 (min y (1- h)))
-		  (max 0 (min x (1- w)))
-		  
-		  )
-	    1))))
-#+nil
-(loop for r from 0 below 360 by 1 do
- (let* ((a (make-array (list 100 100) :element-type '(unsigned-byte 8)))
-	(phi (* pi (/ 180) r))
-	(p (/ (* 2 pi) 3d0))
-	(z1 (+ (complex 50d0 50d0) (* 20 (exp (complex 0d0 phi)))))
-	(z2 (+ (complex 50d0 50d0) (* 20 (exp (complex 0d0 (+ p phi))))))
-	(z3 (+ (complex 50d0 50d0) (* 20 (exp (complex 0d0 (+ p p phi)))))))
-   (sleep .2)
-   (defparameter *a* a)
-   (defparameter *points* (list (list (floor (realpart z1)) (floor (imagpart z1)))
-				(list (floor (realpart z2)) (floor (imagpart z2)))
-				(list (floor (realpart z3)) (floor (imagpart z3)))))
-   (draw-triangle (floor (realpart z1)) (floor (imagpart z1))
-		  (floor (realpart z2)) (floor (imagpart z2))
-		  (floor (realpart z3)) (floor (imagpart z3)))
-   (defparameter *b* *a*)))
-
+		  (max 0 (min x (1- w))))
+	    *color*))))
 
 #+nil
-(defparameter *b* *a*)
-
-#+nil
-(let ((i 1))				;loop for i from 0 below 1 do
+(let ((i 8)) ;loop for i from 0 below (length *bla*) do
      (destructuring-bind (a angle period ax ay bx by) (elt *bla* i)
        (sleep .3)
-       (let* ((h (* 4 (+ (abs ay) (abs by))))
-	      (w (* 4 (+ (abs ax) (abs bx))))
-	      (x (floor w 2))
-	      (y (floor h 2))
+       (let* ((h (* (+ (abs ay) (abs by))))
+	      (w (* (+ (abs ax) (abs bx))))
+	      (x 0)
+	      (y 0)
 	      (a (make-array (list h w)
 			     :element-type '(unsigned-byte 8))))
+	 (defparameter *grating* (list ax ay bx by))
 	 (defparameter *a* a)
+	 (setf *color* 1)
+	 (draw-triangle x y
+			(+ x ax) (+ y ay)
+			(+ x (floor bx 1))
+			(+ y (floor by 1)))
+	 (draw-triangle (+ x ax) (+ y ay)
+			(+ x (floor bx 1)) (+ y (floor by 1))
+			(+ x ax (floor bx 1)) (+ y ay (floor by 1)))
+	 (setf *color* 2)
 	 (draw-triangle x y
 			(+ x ax) (+ y ay)
 			(+ x (floor bx 2))
@@ -356,11 +272,6 @@
 			(+ x (floor bx 2)) (+ y (floor by 2))
 			(+ x ax (floor bx 2)) (+ y ay (floor by 2)))
 	 (defparameter *b* *a*))))
-
-#+nil
-(let ((a (make-array (list 20 20) :element-type '(unsigned-byte 8))))
-  (defparameter *a* a)
-  (draw-triangle 0 0 18 3 7 19))
 
 ;; now some code for visualization of the grating densities or drawing
 ;; there unit cells
@@ -387,43 +298,30 @@
       (color 1 0 0) (vertex 0 0) (vertex 10 0)
       (color 0 1 0) (vertex 0 0) (vertex 0 10)
       (color 0 0 1) (vertex 0 0) (vertex 0 0 10))
-    (color 1 1 1 .3)
-    (point-size 1)
+    
+    (point-size 7)
     (with-pushed-matrix
-      (let ((s .1))
+      (let ((s .6))
 	(scale s s s))
-      (translate  -30 -30 0)
+      (translate  -20 -20 0)
       (when *b*
        (with-primitive :points
 	 (destructuring-bind (h w) (array-dimensions *a*)
 	   (dotimes (i w)
 	     (dotimes (j h)
-	       (when (= 1 (aref *b* j i))
-		 (vertex i j)))))))
-      (when *points*
-	(color 1 0 0)
-	(line-width 2)
-	(with-primitive :line-loop
-	  (loop for (x y) in *points* do
-	       (vertex x y))))
-      (when *edges*
-	(line-width 1)
+	       (case (aref *b* j i)
+		 (2 (color 1 1 1 .9))
+		 (1 (color 1 1 1 .3))
+		 (0 (color 1 0 0 .3)))
+	       (vertex i j)))))
+       
+       (when *grating*
 	(with-primitive :lines
-	  (loop for e in *edges* and i from 0 do
-	       (if (= i *long-edge*)
-		   (color 1 1 .4)
-		   (color .3 .3 1))
-	       (vertex (x1 e) (y1 e))
-	       (vertex (x2 e) (y2 e))))))
-    #+nil
-    (with-primitive :points ;; draw a point for each grating to see
-			    ;; how they distribute in the space of
-			    ;; grating direction and grating period
-      (let ((b *bla*))
-	(loop for (a angle period ax ay bx by) in b and i below 90000 collect
-     (let ((z
-	    (* 1 period (exp (* (complex 0d0 1d0) (* pi (/ 180d0) angle))))))
-       (vertex (realpart z) (imagpart z) (- (* 1d-5 i) 6))))))
+	  (destructuring-bind (a b c d) *grating*
+	    (color 1 0 0)
+	    (vertex 0 0) (vertex a b)
+	    (color 0 1 0)
+	    (vertex 0 0) (vertex c d))))))
     (glut:swap-buffers)
     (sleep (/ 3200))
     (glut:post-redisplay)))
