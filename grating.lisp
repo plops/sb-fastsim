@@ -229,6 +229,7 @@
 	     (incf factor factorstep))))))
 (defparameter *a* nil)
 (defparameter *b* nil)
+(defparameter *c* nil)
 (defparameter *grating* nil)
 (defparameter *color* 0)
 (defun set-pixel (x y)
@@ -240,7 +241,7 @@
 	    *color*))))
 
 #+nil
-(let ((i (min  20 (1- (length *bla*))))) ;loop for i from 0 below (length *bla*) do
+(let ((i (min  9 (1- (length *bla*))))) ;loop for i from 0 below (length *bla*) do
      (destructuring-bind (a angle period ax ay bx by) (elt *bla* i)
        (sleep .3)
        (let* ((h (* (+ (abs ay) (abs by))))
@@ -248,7 +249,9 @@
 	      (x 0)
 	      (y 0)
 	      (a (make-array (list h w)
-			     :element-type '(unsigned-byte 8))))
+			     :element-type '(unsigned-byte 8)))
+	      (c (make-array (list h w)
+			     :element-type 'double-float)))
 	 (defparameter *grating* (list ax ay bx by))
 	 (defparameter *a* a)
 	 (setf *color* 1)
@@ -260,13 +263,24 @@
 			(+ x (floor bx 1)) (+ y (floor by 1))
 			(+ x ax (floor bx 1)) (+ y ay (floor by 1)))
 	 (setf *color* 2)
-	 (draw-triangle x y
+	#+nil (draw-triangle x y
 			(+ x ax) (+ y ay)
 			(+ x (/ bx 2))
 			(+ y (/ by 2)))
-	 (draw-triangle (+ x ax) (+ y ay)
+	#+nil (draw-triangle (+ x ax) (+ y ay)
 			(+ x (/ bx 2)) (+ y (/ by 2))
 			(+ x ax (/ bx 2)) (+ y ay (/ by 2)))
+	 (let* ((f (* 2 pi))
+	       (kax (/ f ax))
+	       (kay (/ f ay))
+	       (kbx (/ f bx))
+	       (kby (/ f by))
+	       (kx (+ kax kbx))
+	       (ky (+ kay kby)))
+	  (dotimes (i w)
+	    (dotimes (j h)
+	      (setf (aref c j i) (sin (+ (* ky j) (* kx i)))))))
+	 (defparameter *c* c)
 	 (defparameter *b* *a*))))
 
 ;; now some code for visualization of the grating densities or drawing
@@ -301,7 +315,19 @@
     (with-pushed-matrix
       (let ((s .2))
 	(scale s s s))
-      (translate  -30 -30 0)
+      (translate  -30 0 0)
+      (when *c*
+       (with-primitive :points
+	 (destructuring-bind (h w) (array-dimensions *c*)
+	   (dotimes (i w)
+	     (dotimes (j h)
+	       #+nil(color 1 1 1 (if (< 0 (aref *c* j i))
+				1
+				0))
+	       
+	       (color 1 1 1 (* .5 (+ 1 (aref *c* j i))))
+	       (vertex i j))))))
+      (translate  0 -66 0)
       (when *b*
        (with-primitive :points
 	 (destructuring-bind (h w) (array-dimensions *a*)
