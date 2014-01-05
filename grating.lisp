@@ -96,7 +96,7 @@
     ;; gratings that have a period from 14 to 16 and that allow phase
     ;; steps dividable by 4 or 7. there are LOTS of these gratings. i
     ;; found millions when i put n to 130
-    (let* ((n 20)
+    (let* ((n 60)
 	   (nn (* 100000))
 	   (ntheta 6)
 	   (s (/ (- ntheta 1) (* 2 pi)))
@@ -108,7 +108,7 @@
 		   (loop for bx from 0 below n do
 			(loop for by from 0 below n do
 			     (let ((p (period ax ay bx by)))
-			       (when (< (abs (- p 8.7)) .1)
+			       (when (< (abs (- p 3.2)) .03)
 				 (let ((v (v-period ax ay bx by))
 				       (h (h-period ax ay bx by)))
 				   (when (and (or (= 0 (mod v 4))
@@ -137,18 +137,15 @@
 ;; triangle rasterization
 ;; Tutorial - Introduction to Software-based Rendering: Triangle Rasterization - joshbeam.com.html
 (defclass edge ()
-  ((x1 :initform 0 :reader x1 :initarg :x1 :type fixnum)
-   (x2 :initform 0 :reader x2 :initarg :x2 :type fixnum)
-   (y1 :initform 0 :reader y1 :initarg :y1 :type fixnum)
-   (y2 :initform 0 :reader y2 :initarg :y2 :type fixnum)))
+  ((x1 :initform 0 :reader x1 :initarg :x1 :type double-float)
+   (x2 :initform 0 :reader x2 :initarg :x2 :type double-float)
+   (y1 :initform 0 :reader y1 :initarg :y1 :type double-float)
+   (y2 :initform 0 :reader y2 :initarg :y2 :type double-float)))
 
 (defmethod initialize-instance :after ((e edge) &key)
   (with-slots (x1 x2 y1 y2) e
     (when (< y2 y1) ;; ensure first point has lower y value
-      ;;(rotatef x1 x2) (rotatef y1 y2)
-      (let ((h x1)) (setf x1 x2) (setf x2 h))
-      (let ((h y1)) (setf y1 y2) (setf y2 h))
-      )))
+      (rotatef x1 x2) (rotatef y1 y2))))
 
 (defmethod print-object ((e edge) stream)
   (print-unreadable-object (e stream :type t)
@@ -161,7 +158,7 @@
 (make-instance 'edge :x1 0 :x2 100 :y1 300 :y2 10)
 
 (defun draw-triangle (x1 y1 x2 y2 x3 y3)
-  (declare (type fixnum x1 y1 x2 y2 x3 y3))
+ ; (declare (type double-float x1 y1 x2 y2 x3 y3))
   (let* ((points `(((,x1 ,y1) (,x2 ,y2))
 		   ((,x2 ,y2) (,x3 ,y3))
 		   ((,x3 ,y3) (,x1 ,y1))))
@@ -189,14 +186,13 @@
 			      (elt edges short-edge-2))))
 
 (defclass span ()
-  ((x1 :initform 0 :reader span-x1 :initarg :x1 :type fixnum)
-   (x2 :initform 0 :reader span-x2 :initarg :x2 :type fixnum)))
+  ((x1 :initform 0 :reader span-x1 :initarg :x1 :type double-float)
+   (x2 :initform 0 :reader span-x2 :initarg :x2 :type double-float)))
 
 (defmethod initialize-instance :after ((s span) &key)
   (with-slots (x1 x2) s
     (when (< x2 x1) ;; ensure first coordinate has lower x value
-      ;(rotatef x1 x2)
-      (let ((h x1)) (setf x1 x2) (setf x2 h)))))
+      (rotatef x1 x2))))
 
 (defmethod print-object ((s span) stream)
   (print-unreadable-object (s stream :type t)
@@ -239,12 +235,12 @@
   (when *a*
     (destructuring-bind (h w) (array-dimensions *a*)
       (setf (aref *a*
-		  (max 0 (min y (1- h)))
-		  (max 0 (min x (1- w))))
+		  (max 0 (min (floor y) (1- h)))
+		  (max 0 (min (floor x) (1- w))))
 	    *color*))))
 
 #+nil
-(let ((i 8)) ;loop for i from 0 below (length *bla*) do
+(let ((i (min  20 (1- (length *bla*))))) ;loop for i from 0 below (length *bla*) do
      (destructuring-bind (a angle period ax ay bx by) (elt *bla* i)
        (sleep .3)
        (let* ((h (* (+ (abs ay) (abs by))))
@@ -266,11 +262,11 @@
 	 (setf *color* 2)
 	 (draw-triangle x y
 			(+ x ax) (+ y ay)
-			(+ x (floor bx 2))
-			(+ y (floor by 2)))
+			(+ x (/ bx 2))
+			(+ y (/ by 2)))
 	 (draw-triangle (+ x ax) (+ y ay)
-			(+ x (floor bx 2)) (+ y (floor by 2))
-			(+ x ax (floor bx 2)) (+ y ay (floor by 2)))
+			(+ x (/ bx 2)) (+ y (/ by 2))
+			(+ x ax (/ bx 2)) (+ y ay (/ by 2)))
 	 (defparameter *b* *a*))))
 
 ;; now some code for visualization of the grating densities or drawing
@@ -293,17 +289,19 @@
     #+nil (rotate 20 1 0 0)
     #+nil (rotate (+
 	      240) 0 1 0)
+    (line-width 1)
     (glut:wire-cube 10)
+    
     (with-primitive :lines
       (color 1 0 0) (vertex 0 0) (vertex 10 0)
       (color 0 1 0) (vertex 0 0) (vertex 0 10)
       (color 0 0 1) (vertex 0 0) (vertex 0 0 10))
     
-    (point-size 7)
+    (point-size 2)
     (with-pushed-matrix
-      (let ((s .6))
+      (let ((s .2))
 	(scale s s s))
-      (translate  -20 -20 0)
+      (translate  -30 -30 0)
       (when *b*
        (with-primitive :points
 	 (destructuring-bind (h w) (array-dimensions *a*)
@@ -316,11 +314,12 @@
 	       (vertex i j)))))
        
        (when *grating*
+	 (line-width 3)
 	(with-primitive :lines
 	  (destructuring-bind (a b c d) *grating*
-	    (color 1 0 0)
+	    (color 1 0 0 .6)
 	    (vertex 0 0) (vertex a b)
-	    (color 0 1 0)
+	    (color 0 1 0 .6)
 	    (vertex 0 0) (vertex c d))))))
     (glut:swap-buffers)
     (sleep (/ 3200))
